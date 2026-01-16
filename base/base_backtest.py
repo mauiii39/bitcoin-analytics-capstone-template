@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-from model_development import compute_window_weights, precompute_features
-from prelude import (
+from base.base_model_development import compute_window_weights, precompute_features
+from base.base_prelude import (
     backtest_dynamic_dca,
     check_strategy_submission_ready,
     load_data,
@@ -36,7 +36,7 @@ def compute_weights_modal(df_window: pd.DataFrame) -> pd.Series:
     all dates in the window are in the "past" (we have price data for them).
 
     This implementation uses the shared compute_window_weights() from
-    model_development.py to ensure backtest results match production behavior.
+    base_model_development.py to ensure backtest results match production behavior.
     """
     global _FEATURES_DF
 

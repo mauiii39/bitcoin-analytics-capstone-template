@@ -1,11 +1,11 @@
-"""Tests for backtest.py - Visualization and metrics export."""
+"""Tests for base_backtest.py - Visualization and metrics export."""
 
 import json
 import os
 
 import pandas as pd
 
-from backtest import (
+from base.base_backtest import (
     create_cumulative_performance,
     create_excess_percentile_distribution,
     create_performance_comparison_chart,

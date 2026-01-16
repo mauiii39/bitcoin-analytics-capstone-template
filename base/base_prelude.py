@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from model_development import precompute_features
+from base.base_model_development import precompute_features
 
 try:
     from IPython.display import display
@@ -107,7 +107,7 @@ def generate_date_ranges(
 
     Uses DATE_FREQ (daily) for start date generation.
     Each start_date is paired with exactly one end_date that is 1 year later.
-    Uses WINDOW_OFFSET from prelude.py for consistency across modules.
+    Uses WINDOW_OFFSET from base_prelude.py for consistency across modules.
 
     Args:
         range_start: Start of the date range (YYYY-MM-DD format)

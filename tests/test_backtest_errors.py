@@ -1,4 +1,4 @@
-"""Tests for error handling in backtest.py.
+"""Tests for error handling in base_backtest.py.
 
 Tests error conditions, exception handling, and edge cases that should
 raise appropriate errors or handle gracefully.
@@ -13,9 +13,9 @@ import pytest
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import backtest
-from backtest import compute_weights_modal
-from model_development import precompute_features
+import base.base_backtest as backtest
+from base.base_backtest import compute_weights_modal
+from base.base_model_development import precompute_features
 
 # -----------------------------------------------------------------------------
 # compute_weights_modal Error Tests

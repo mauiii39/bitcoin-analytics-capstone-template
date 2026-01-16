@@ -1,4 +1,4 @@
-"""Performance benchmark tests for backtest.py.
+"""Performance benchmark tests for base_backtest.py.
 
 These tests are marked with @pytest.mark.performance and can be
 skipped in regular test runs using: pytest -m "not performance"
@@ -17,10 +17,10 @@ import pytest
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import backtest
-from backtest import compute_weights_modal
-from model_development import compute_weights_fast, precompute_features
-from prelude import compute_cycle_spd
+import base.base_backtest as backtest
+from base.base_backtest import compute_weights_modal
+from base.base_model_development import compute_weights_fast, precompute_features
+from base.base_prelude import compute_cycle_spd
 
 # -----------------------------------------------------------------------------
 # Feature Precomputation Performance Tests

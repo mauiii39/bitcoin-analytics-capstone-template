@@ -56,7 +56,7 @@ def sample_btc_df(sample_btc_prices):
 @pytest.fixture
 def sample_features_df(sample_btc_df):
     """Create precomputed features DataFrame."""
-    from model_development import precompute_features
+    from base.base_model_development import precompute_features
 
     return precompute_features(sample_btc_df)
 
@@ -352,7 +352,7 @@ def truncated_features_df_factory(sample_btc_df):
     Returns a function that precomputes features using only data up to
     a specified date, simulating point-in-time feature availability.
     """
-    from model_development import precompute_features
+    from base.base_model_development import precompute_features
 
     def _create_truncated_features(truncate_date):
         """Create features using only data up to truncate_date.
@@ -506,7 +506,7 @@ def sample_btc_df_validate():
 @pytest.fixture
 def sample_features_df_validate(sample_btc_df_validate):
     """Precompute features for validation sample data."""
-    from model_development import precompute_features
+    from base.base_model_development import precompute_features
 
     return precompute_features(sample_btc_df_validate)
 
@@ -529,7 +529,7 @@ def deterministic_features_fixture():
 
     Features are designed so that day with lowest z-score gets highest weight.
     """
-    from model_development import FEATS
+    from base.base_model_development import FEATS
 
     dates = pd.date_range("2025-01-01", "2025-01-05", freq="D")
     # Create features where day 0 has lowest z-scores (should get highest weight)

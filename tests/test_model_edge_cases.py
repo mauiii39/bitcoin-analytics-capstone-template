@@ -1,4 +1,4 @@
-"""Unit tests for edge cases in model_development.py.
+"""Unit tests for edge cases in base_model_development.py.
 
 Covers:
 1. allocate_sequential_stable edge cases (n_past behavior)
@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from model_development import (
+from base.base_model_development import (
     allocate_sequential_stable,
     compute_dynamic_multiplier,
     compute_adaptive_trend_modifier,
