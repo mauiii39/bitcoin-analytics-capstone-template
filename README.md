@@ -72,7 +72,14 @@ python data/download_data.py
 
 **Included Data:**
 * **CoinMetrics BTC Data**: Daily OHLCV and network metrics.
+  * **Bitcoin Price Source of Truth**: The `PriceUSD` column in the CoinMetrics data is the source of truth for BTC-USD prices. This is renamed to `PriceUSD_coinmetrics` in the codebase. This is the only column you hypothetically need to build a model (along with the datetime index, of course).
 * **Polymarket Data**: High-fidelity parquet files containing trades, odds history, and market metadata.
+
+**External Data:**
+External data is encouraged; students are responsible for ensuring that the data license permits all project participants to access and use (i.e., no proprietary data).
+
+**System Requirements:**
+Assume a modern laptop specification (think 16GB M4 Air).
 
 ---
 
@@ -90,6 +97,10 @@ A core opportunity lies in evolving this baseline into a market-aware strategy, 
 *   **Retail Sentiment**: Specific "Polymarket Crypto" markets could potentially serve as proxies for retail sentiment or exuberance.
 
 ### Running Backtests
+
+**Backtest Date Range:**
+* **Range:** `2018-01-01` to `2025-12-31` (inclusive; daily frequency; no days should be missing)
+* The backtest engine uses rolling 1-year windows starting from the start date, generating daily windows until the end date.
 
 **Baseline Model:**
 ```bash
