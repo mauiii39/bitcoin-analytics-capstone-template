@@ -92,97 +92,115 @@ def _compute_rsi(price: pd.Series, window: int = 14) -> pd.Series:
     return rsi.clip(0, 100)
 
 
-def _load_optional_polymarket_daily(index: pd.Index) -> pd.DataFrame:
-    """
-    Best-effort loader for optional local Polymarket features.
-    Returns neutral values if files/columns are unavailable.
+def _load_optional_polymarket_daily(index):
+    from pathlib import Path
+    import pandas as pd
+    import numpy as np
 
-    This avoids circular imports with prelude_template.py.
-    """
     out = pd.DataFrame(index=index)
     out["market_sentiment"] = 0.0
     out["fed_rate_cut_prob"] = np.nan
     out["btc_100k_prob"] = np.nan
+    out["sentiment_momentum"] = 0.0
 
-    candidate_dirs = [
-        Path(__file__).resolve().parent.parent / "data" / "Polymarket",
-        Path("data/Polymarket"),
-    ]
+    base_dir = Path(__file__).resolve().parent.parent
+    pm_dir = base_dir / "data" / "Polymarket"
 
-    data_dir = next((p for p in candidate_dirs if p.exists()), None)
-    if data_dir is None:
-        out["sentiment_momentum"] = 0.0
-        return out
+    markets_fp = pm_dir / "finance_politics_markets.parquet"
+    odds_fp = pm_dir / "finance_politics_odds_history.parquet"
 
-    parquet_files = list(data_dir.glob("*.parquet"))
-    if not parquet_files:
-        out["sentiment_momentum"] = 0.0
-        return out
+    if not markets_fp.exists() or not odds_fp.exists():
+        print("Polymarket raw files not found")
+        return out.fillna(0.0)
 
-    daily_frames: list[pd.Series] = []
+    # 🔹 Load data
+    markets = pd.read_parquet(markets_fp)
+    odds = pd.read_parquet(odds_fp)
 
-    for fp in parquet_files:
-        try:
-            df = pd.read_parquet(fp)
-        except Exception:
-            continue
+    # 🔹 Merge
+    df = odds.merge(markets, on="market_id", how="left")
 
-        cols = {c.lower(): c for c in df.columns}
+    print("\n--- DEBUG: AFTER MERGE ---")
+    print("Shape:", df.shape)
 
-        time_col = None
-        for c in ["timestamp", "time", "date", "datetime", "createdat"]:
-            if c in cols:
-                time_col = cols[c]
-                break
+    # 🔹 Use REAL timestamp from markets
+    df["date"] = pd.to_datetime(df["created_at"]).dt.normalize()
 
-        value_col = None
-        for c in ["probability", "price", "mid_price", "yes_price", "odds", "value"]:
-            if c in cols:
-                value_col = cols[c]
-                break
+    print("\n--- DEBUG: DATE RANGE ---")
+    print("Min:", df["date"].min(), "Max:", df["date"].max())
 
-        if time_col and value_col:
-            tmp = df[[time_col, value_col]].copy()
-            tmp[time_col] = pd.to_datetime(tmp[time_col], errors="coerce")
-            tmp = tmp.dropna(subset=[time_col])
+    # 🔹 Normalize probability
+    prob_col = "price"
+    df[prob_col] = pd.to_numeric(df[prob_col], errors="coerce")
 
-            if tmp.empty:
-                continue
+    if df[prob_col].max() > 1.5:
+        df[prob_col] = df[prob_col] / 100.0
 
-            tmp["date"] = tmp[time_col].dt.normalize()
-            daily = pd.to_numeric(tmp[value_col], errors="coerce").groupby(tmp["date"]).mean()
+    # 🔥 CLASSIFICATION (fixed)
+    def classify_market(q):
+        q = str(q).lower()
 
-            # normalize probabilities/prices into roughly [-1, 1]
-            if daily.notna().any():
-                if daily.max() > 1.5:
-                    # maybe percentages / cents
-                    if daily.max() <= 100:
-                        daily = daily / 100.0
-                daily = (daily - 0.5) * 2.0
-                daily_frames.append(daily.rename(fp.stem))
+        if any(k in q for k in ["bitcoin", "btc", "crypto", "eth", "ethereum"]):
+            return "crypto"
 
-        # optional direct named columns if present
-        if "fed_rate_cut_prob" in df.columns:
-            tmp = df.copy()
-            if time_col:
-                tmp[time_col] = pd.to_datetime(tmp[time_col], errors="coerce")
-                tmp["date"] = tmp[time_col].dt.normalize()
-                daily = pd.to_numeric(tmp["fed_rate_cut_prob"], errors="coerce").groupby(tmp["date"]).mean()
-                out["fed_rate_cut_prob"] = daily.reindex(index)
+        elif any(k in q for k in [
+            "fed", "federal reserve", "interest rate", "rates",
+            "inflation", "cpi", "economy", "recession"
+        ]):
+            return "macro"
 
-        if "btc_100k_prob" in df.columns:
-            tmp = df.copy()
-            if time_col:
-                tmp[time_col] = pd.to_datetime(tmp[time_col], errors="coerce")
-                tmp["date"] = tmp[time_col].dt.normalize()
-                daily = pd.to_numeric(tmp["btc_100k_prob"], errors="coerce").groupby(tmp["date"]).mean()
-                out["btc_100k_prob"] = daily.reindex(index)
+        elif any(k in q for k in [
+            "election", "president", "trump", "biden", "vote"
+        ]):
+            return "political"
 
-    if daily_frames:
-        stacked = pd.concat(daily_frames, axis=1)
-        out["market_sentiment"] = stacked.mean(axis=1).reindex(index).fillna(0.0)
+        else:
+            return "other"
 
+    df["category"] = df["question"].apply(classify_market)
+
+    # 🔹 keep only useful ones
+    df = df[df["category"].isin(["crypto", "macro", "political"])]
+
+    print("\n--- DEBUG: FIXED CATEGORY COUNTS ---")
+    print(df["category"].value_counts())
+
+    # 🔹 Aggregate
+    daily = df.groupby(["date", "category"])[prob_col].mean().unstack()
+
+    # 🔹 Normalize to [-1, 1]
+    daily = (daily - 0.5) * 2
+    daily = daily.fillna(0.0)
+
+    print("\n--- DEBUG: DAILY ---")
+    print(daily.head())
+
+    # 🔹 Build sentiment
+    sentiment = pd.Series(0.0, index=daily.index)
+
+    if "crypto" in daily.columns:
+        sentiment += 0.6 * daily["crypto"]
+
+    if "macro" in daily.columns:
+        sentiment += 0.25 * daily["macro"]
+
+    if "political" in daily.columns:
+        sentiment += 0.15 * daily["political"]
+
+    sentiment = sentiment.clip(-1, 1)
+
+    print("\n--- DEBUG: FINAL SENTIMENT ---")
+    print(sentiment.describe())
+
+    # 🔹 Align with BTC index
+    aligned = sentiment.reindex(index)
+    aligned = aligned.ffill().fillna(0.0)
+
+    out["market_sentiment"] = aligned
+
+    # 🔹 Momentum
     out["sentiment_momentum"] = out["market_sentiment"].diff(7).fillna(0.0)
+
     return out
 
 
@@ -227,9 +245,25 @@ def precompute_features(df: pd.DataFrame) -> pd.DataFrame:
     features["nvt_trend"] = features["nvt_ma"] / features["nvt_ma"].rolling(90, min_periods=30).mean()
 
     # Optional Polymarket-style features
+# === POLYMARKET FEATURES ===
     pm = _load_optional_polymarket_daily(features.index)
-    for col in pm.columns:
-        features[col] = pm[col]
+
+    # 🔥 Z-score normalization (rolling, robust)
+    raw_sentiment = pm["market_sentiment"]
+
+    sentiment_z = (
+        raw_sentiment - raw_sentiment.rolling(90, min_periods=30).mean()
+    ) / (raw_sentiment.rolling(90, min_periods=30).std() + 1e-8)
+
+    features["market_sentiment"] = sentiment_z.clip(-2, 2)
+
+    # 🔥 MOMENTUM (very important)
+    features["sentiment_momentum"] = features["market_sentiment"].diff(7)
+
+    # keep other polymarket features if they exist
+    for col in ["fed_rate_cut_prob", "btc_100k_prob"]:
+        if col in pm.columns:
+            features[col] = pm[col]
 
     # Lag everything except raw price / slow moving averages where needed
     lag_cols = [
@@ -251,7 +285,20 @@ def precompute_features(df: pd.DataFrame) -> pd.DataFrame:
         features[col] = features[col].shift(1)
 
     features["buy_opportunity"] = _calculate_buy_opportunity_score(features)
-    return features.fillna(method="ffill").fillna(0.0)
+    features = features.fillna(method="ffill").fillna(0.0)
+
+    # Save debug CSV with timestamp index
+    output_dir = Path(__file__).parent.parent / "output"
+    output_dir.mkdir(exist_ok=True)
+
+    features[[
+        "market_sentiment",
+        "sentiment_momentum",
+        "fed_rate_cut_prob",
+        "btc_100k_prob"
+    ]].to_csv(output_dir / "polymarket_features_debug.csv", index=True)
+
+    return features
 
 
 def _calculate_buy_opportunity_score(features: pd.DataFrame) -> pd.Series:
@@ -304,10 +351,28 @@ def _calculate_buy_opportunity_score(features: pd.DataFrame) -> pd.Series:
     # -------------------------------------------------------------------------
     sentiment = pd.Series(0.0, index=features.index)
 
+    # 🔥 Continuous contrarian signal
     market_sentiment = features["market_sentiment"]
-    sentiment += np.where(market_sentiment < -0.40, 0.40, 0.0)
-    sentiment += np.where((market_sentiment >= -0.40) & (market_sentiment < -0.20), 0.30, 0.0)
-    sentiment += np.where((market_sentiment >= -0.20) & (market_sentiment < 0.0), 0.10, 0.0)
+
+    # more negative sentiment → stronger buy
+    sentiment += np.clip(-market_sentiment, 0, 2) * 0.4
+
+    # penalize extreme bullishness (crowded trade)
+    sentiment -= np.clip(market_sentiment - 0.5, 0, 2) * 0.2
+
+
+    # 🔥 ADD MOMENTUM HERE
+    sentiment_momentum = features["sentiment_momentum"]
+
+    # improving sentiment → bullish confirmation
+    sentiment += np.clip(sentiment_momentum, 0, 2) * 0.3
+
+    # worsening sentiment → reduce exposure
+    sentiment -= np.clip(-sentiment_momentum, 0, 2) * 0.2
+
+
+    # 🔒 keep within bounds
+    sentiment = sentiment.clip(0, 1)
 
     sentiment_momentum = features["sentiment_momentum"]
     sentiment += np.where(sentiment_momentum > 0.10, 0.20, 0.0)
