@@ -291,13 +291,6 @@ def precompute_features(df: pd.DataFrame) -> pd.DataFrame:
     output_dir = Path(__file__).parent.parent / "output"
     output_dir.mkdir(exist_ok=True)
 
-    features[[
-        "market_sentiment",
-        "sentiment_momentum",
-        "fed_rate_cut_prob",
-        "btc_100k_prob"
-    ]].to_csv(output_dir / "polymarket_features_debug.csv", index=True)
-
     return features
 
 
